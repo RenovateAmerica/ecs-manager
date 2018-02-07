@@ -1,0 +1,7 @@
+{
+  "IntervalSeconds": "5",
+  "AlertIntervalCount": "4",
+  "AlertCooldownIntervalCount": "0",
+  "ResourceRemoveThresholdPercent": "0.40",
+  "ResourceAddThresholdPercent": "0.80"
+}
