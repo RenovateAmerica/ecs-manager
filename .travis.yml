@@ -13,3 +13,4 @@ deploy:
   file: ecs-manager
   on:
     repo: sd-charris/ecs-manager
+    tags: true
