@@ -1,9 +1,9 @@
 package main
 
 import (
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/alert"
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/config"
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/ecs"
+	"github.com/sd-charris/ecs-manager/alert"
+	"github.com/sd-charris/ecs-manager/config"
+	"github.com/sd-charris/ecs-manager/ecs"
 	"github.com/sd-charris/logrus-cloudwatchlogs"
 	"github.com/go-errors/errors"
 	"github.com/sirupsen/logrus"
