@@ -7,8 +7,8 @@ import (
 	"github.com/sd-charris/logrus-cloudwatchlogs"
 	"github.com/go-errors/errors"
 	"github.com/sirupsen/logrus"
-	"time"
 	"github.com/aws/aws-sdk-go/aws"
+	"time"
 	"log"
 	"strconv"
 )
