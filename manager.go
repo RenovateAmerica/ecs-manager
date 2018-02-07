@@ -2,9 +2,9 @@ package main
 
 import (
 	"regexp"
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/alert"
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/ecs"
-	"git.renovateamerica.com/rsi/ra.services.ecsmanager/config"
+	"github.com/sd-charris/ecs-manager/alert"
+	"github.com/sd-charris/ecs-manager/config"
+	"github.com/sd-charris/ecs-manager/ecs"
 	"github.com/sirupsen/logrus"
 	"sort"
 	"time"
