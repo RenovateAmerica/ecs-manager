@@ -8,6 +8,7 @@ script:
 - go build
 deploy:
   provider: releases
+  skip_cleanup: true # Important, otherwise the build output would be purged.
   api_key:
     secure: fbqwY/5ixY1+cc/7g/M58MkVUs05gI8xi0Eqx11N8+mXI8b8PPSPE1zZI2fVYy+8zmKdpI6fP+eeS5W/Ds87G0KZD19gFR5s2WtS/333QcmlCTf8mxLlfJVN9cykptRRBwUXtjXKipaD0s8a75diykpxCRMHbR0quH0Gv/57agaIrZH2Z5KxK8WeXrUmp39yHqoDp1eD17QD4IO1WTfYOYK8IOy7XNDP3cmf33sFckTOXcy0hZa/tNRmAlB197UM8T/MrA0cg1mhxi8Oqh+wdqDix2Yb3oNHoJd1K78cutpxy6k2ssHHRW8B1QWRXjquHOAUvPikQLwsHTDmPd8TmoP3+zJ6hgIE6tCZVyi63Z+HecBGoKbYnu8mlhtItz7lgpknFKUQAQmHJ9vWNV7uLm5BdwaCYW5CIcSlVUUR+hAlIjinEPOstuo25+8HV30nBGAPgN683CN9wxW1omUnOkPUHQjlIzfC2ECbZbyxYNW77kgk+29emq2UTfhnueyI+pBHJA2TT/5EVBTmiVe3YkB0icORCcNEgE++vpB+IBK3Dkfbx28Ua5P/ul1qHQj3o9i2kqk39zvL4/IhkbP6s1XZmcuJPkplfia9rzAKmB7ZGhGsEosB0wHAyg998T2YrpatnqFkTo8G0PW1D2OoqV437pNRmSwy/zFQ9GPxXr4=
   file: ecs-manager
