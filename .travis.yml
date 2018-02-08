@@ -11,7 +11,7 @@ deploy:
   skip_cleanup: true # Important, otherwise the build output would be purged.
   api_key:
     secure: T7m3Q2zaXBJFl93dx+7IiXk8kBcz7fO3xGr8ok4QxAS21LiiBDynNgQr/tWVV3ylNMD6zH6BPHEdALccif3jRmgv3upaN5NZYQ2dcVwx/F2ABAY0rS7MUViFbJ04/9+Asrn53AINTginFsEJ6ALNlEa/zUMGNoqiFCaLp2Nsk+N+LQPKb74DlgiHCR7VyR33sN9IT2MKSNFIYFVI2L9SZyvYrRbet2q7q7kJbgbTSKj5gDaUz891ZnejTRPxqtM2VIrGiGEwDrfb0EbioaSIbOKAs5NnxmL9ouRHicCBAIMlgmbdkv2zb8ELf6A+UMyPqTct4yDfj0iJFrfgrAflFdIcsKYvNLns+4kCclxULpJH5MDhKhINDVGoGLBjBRg8Yoa4/8RfCxScuLmVjbok8s5kO4xvsLTUpf1dbIVKCTpCgq1N+rQAtTt8VqJ6gb0e/Q/fEgrKexoQa2pZCfVKjjK9ZpWdH6jXDTfOt8ggVZjogBZTCMMoohAruInCQKBZoI/cMj6Zqg2wsCV2ofw0TpKw4Uz+iz0marLqvr0vC3bEeeAcxDD7QbDlf5JOM89iP0NyJBwQoZmLpN5KV+Rwq7KSX2Bd8rdgry0pZglVryaEeErbuZZ1up93Q6XULdhtzofbgifOY7E6CLG28meKuzjq3EAinUPcKAmYg9N46Ps=
-  file: "./ecs-manager"
+  file: "ecs-manager"
   on:
     repo: sd-charris/ecs-manager
     tags: true
