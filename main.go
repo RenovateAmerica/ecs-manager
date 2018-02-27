@@ -37,7 +37,7 @@ func main() {
 	logrus.Info("Pull Configuration")
 	config.LoadConfig("./config.json")
 
-	logrus.Info("Starting AWS ECS Manager v1.4")
+	logrus.Info("Starting ECS Manager v1.4")
 	logrus.Info("Configure AWS ECS")
 	ecs.Initialize()
 
