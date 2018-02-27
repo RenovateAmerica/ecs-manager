@@ -3,12 +3,13 @@ package ecs
 import (
 	"strconv"
 	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/go-errors/errors"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/go-errors/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -51,6 +52,7 @@ type ContainerInstance struct {
 	TotalMemory          *int64
 	PendingTasksCount    *int64
 	RunningTasksCount    *int64
+	AvailabilityZone     *string
 }
 
 type ClusterDetails struct {
@@ -58,7 +60,7 @@ type ClusterDetails struct {
 	ContainerInstances   []*ContainerInstance
 	Tasks                []*Task
 	Services             []*Service
-	AutoScalingGroup *AutoScalingGroupDetails
+	AutoScalingGroup     *AutoScalingGroupDetails
 	TotalMemory          int64
 	TotalCPU             int64
 	TotalRemainingMemory int64
@@ -68,10 +70,10 @@ type ClusterDetails struct {
 }
 
 type AutoScalingGroupDetails struct {
-	Name *string
-	AutoScalingGroupArn *string
-	MinInstanceCount *int64
-	MaxInstanceCount *int64
+	Name                 *string
+	AutoScalingGroupArn  *string
+	MinInstanceCount     *int64
+	MaxInstanceCount     *int64
 	DesiredInstanceCount *int64
 }
 
@@ -95,6 +97,15 @@ func getResourceValue(attributes []*ecs.Resource, attributeName string) *int64 {
 	for _, attribute := range attributes {
 		if *attribute.Name == attributeName {
 			return attribute.IntegerValue
+		}
+	}
+	return nil
+}
+
+func getAttributeValue(attributes []*ecs.Attribute, attributeName string) *string {
+	for _, attribute := range attributes {
+		if *attribute.Name == attributeName {
+			return attribute.Value
 		}
 	}
 	return nil
@@ -132,6 +143,7 @@ func (c *ClusterDetails) getContainerInstances() error {
 			container.RemainingMemory = getResourceValue(containerInstance.RemainingResources, "MEMORY")
 			container.RunningTasksCount = containerInstance.RunningTasksCount
 			container.PendingTasksCount = containerInstance.PendingTasksCount
+			container.AvailabilityZone = getAttributeValue(containerInstance.Attributes, "ecs.availability-zone")
 			c.ContainerInstances = append(c.ContainerInstances, &container)
 		}
 	}
@@ -228,7 +240,7 @@ func (c *ClusterDetails) getAutoScalingGroups() error {
 		return nil
 	}
 
-	instanceIds := make([]*string,0)
+	instanceIds := make([]*string, 0)
 	for _, containerInstance := range c.ContainerInstances {
 		instanceIds = append(instanceIds, containerInstance.EC2InstanceId)
 	}
@@ -253,11 +265,11 @@ func (c *ClusterDetails) getAutoScalingGroups() error {
 		if len(resDescribeAutoScalingGroups.AutoScalingGroups) == 1 {
 			autoScalingGroup := resDescribeAutoScalingGroups.AutoScalingGroups[0]
 			c.AutoScalingGroup = &AutoScalingGroupDetails{
-				Name: autoScalingGroup.AutoScalingGroupName,
-				AutoScalingGroupArn: autoScalingGroup.AutoScalingGroupARN,
+				Name:                 autoScalingGroup.AutoScalingGroupName,
+				AutoScalingGroupArn:  autoScalingGroup.AutoScalingGroupARN,
 				DesiredInstanceCount: autoScalingGroup.DesiredCapacity,
-				MaxInstanceCount: autoScalingGroup.MaxSize,
-				MinInstanceCount: autoScalingGroup.MinSize,
+				MaxInstanceCount:     autoScalingGroup.MaxSize,
+				MinInstanceCount:     autoScalingGroup.MinSize,
 			}
 		} else {
 			logrus.Error("Could not find autoscaling group")
@@ -267,38 +279,31 @@ func (c *ClusterDetails) getAutoScalingGroups() error {
 	return nil
 }
 
-func (c *ClusterDetails) getInstanceId(containerInstanceArn *string) *string {
-	var res string
+func (c *ClusterDetails) GetContainerInstance(containerInstanceArn *string) *ContainerInstance {
 	for _, instance := range c.ContainerInstances {
 		if *instance.ContainerInstanceArn == *containerInstanceArn {
-			return instance.EC2InstanceId
+			return instance
 		}
 	}
-	return &res
+	return nil
 }
 
-func (c *ClusterDetails) GetTaskCount(containerInstanceArn *string) *int64 {
-	var res int64
-	for _, instance := range c.ContainerInstances {
-		if *instance.ContainerInstanceArn == *containerInstanceArn {
-			return instance.RunningTasksCount
-		}
-	}
-	return &res
-}
 
 func (c *ClusterDetails) IncreaseClusterCapacity() error {
 	newDesiredCapacity := *c.AutoScalingGroup.DesiredInstanceCount + 1
 
-	if newDesiredCapacity> *c.AutoScalingGroup.MaxInstanceCount {
+	if newDesiredCapacity > *c.AutoScalingGroup.MaxInstanceCount {
 		logrus.Error("Maximum Instance Capacity exceeded")
 		return nil
 	}
+
+	req := &autoscaling.UpdateAutoScalingGroupInput{DesiredCapacity: &newDesiredCapacity, AutoScalingGroupName: c.AutoScalingGroup.Name}
 	logrus.WithFields(logrus.Fields{
-		"ClusterArn":    *c.ClusterArn,
+		"AutoScalingGroupName": *req.AutoScalingGroupName,
+		"DesiredCapacity":      *req.DesiredCapacity,
 	}).Info("Increasing Cluster Capacity")
 
-	_, err := autoscalingService.UpdateAutoScalingGroup(&autoscaling.UpdateAutoScalingGroupInput{ DesiredCapacity: &newDesiredCapacity, AutoScalingGroupName: c.AutoScalingGroup.Name })
+	_, err := autoscalingService.UpdateAutoScalingGroup(req)
 
 	if err != nil {
 		logrus.Error(err)
@@ -308,50 +313,79 @@ func (c *ClusterDetails) IncreaseClusterCapacity() error {
 	return nil
 }
 
-func (c *ClusterDetails) DrainClusterInstance(instanceArn *string) (*string, error) {
-	if instanceArn == nil {
-		var instance *ContainerInstance
-		for _, instanceMember := range c.ContainerInstances {
-			if instance == nil {
-				instance = instanceMember
-			} else if *instanceMember.RunningTasksCount < *instance.RunningTasksCount {
-				instance = instanceMember
-			}
-		}
-		instanceArn = instance.ContainerInstanceArn
-	}
-	logrus.WithFields(logrus.Fields{
-		"ClusterArn":    *c.ClusterArn,
-		"ContainerInstanceARN":  *instanceArn,
-	}).Info("Draining Cluster Instance")
 
-	instanceState := "DRAINING"
-	_, err := ecsService.UpdateContainerInstancesState(&ecs.UpdateContainerInstancesStateInput{ContainerInstances: []*string{instanceArn}, Status:&instanceState, Cluster: c.ClusterArn})
+func (c *ClusterDetails) StandByClusterInstance(containerInstanceArn *string) (*string, error) {
+
+	var containerInstance = c.GetContainerInstance(containerInstanceArn)
+
+	logrus.WithFields(logrus.Fields{
+		"ClusterArn":           *c.ClusterArn,
+		"ContainerInstanceARN": *containerInstanceArn,
+	}).Info("Placing Instance in Standby")
+
+	var shouldDecrement = false
+	_, err := autoscalingService.EnterStandby(&autoscaling.EnterStandbyInput{AutoScalingGroupName: c.AutoScalingGroup.Name, InstanceIds: []*string{containerInstance.EC2InstanceId}, ShouldDecrementDesiredCapacity: &shouldDecrement})
 
 	if err != nil {
 		logrus.Error(err)
 		return nil, errors.Wrap(err, 1)
 	}
 
-	return instanceArn, nil
+	return containerInstanceArn, nil
+}
+
+func (c *ClusterDetails) DrainClusterInstance(containerInstanceArn *string) (*string, error) {
+	var drainCandidateContainerInstanceArn *string
+	instanceStillActive := false
+	var instance *ContainerInstance
+	for _, instanceMember := range c.ContainerInstances {
+		if instance == nil {
+			instance = instanceMember
+		} else if *instanceMember.RunningTasksCount < *instance.RunningTasksCount {
+			instance = instanceMember
+		}
+		if containerInstanceArn != nil && *instanceMember.ContainerInstanceArn == *containerInstanceArn {
+			instanceStillActive = true
+		}
+	}
+	drainCandidateContainerInstanceArn = instance.ContainerInstanceArn
+
+	if !instanceStillActive {
+		containerInstanceArn = drainCandidateContainerInstanceArn
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"ClusterArn":           *c.ClusterArn,
+		"ContainerInstanceARN": *containerInstanceArn,
+	}).Info("Draining Cluster Instance")
+
+	instanceState := "DRAINING"
+	_, err := ecsService.UpdateContainerInstancesState(&ecs.UpdateContainerInstancesStateInput{ContainerInstances: []*string{containerInstanceArn}, Status: &instanceState, Cluster: c.ClusterArn})
+
+	if err != nil {
+		logrus.Error(err)
+		return nil, errors.Wrap(err, 1)
+	}
+
+	return containerInstanceArn, nil
 }
 
 func (c *ClusterDetails) RemoveClusterInstance(containerInstanceArn *string) error {
- 	instanceId := c.getInstanceId(containerInstanceArn)
+	instance := c.GetContainerInstance(containerInstanceArn)
 	logrus.WithFields(logrus.Fields{
-		"ClusterArn":    *c.ClusterArn,
-		"InstanceId":  *instanceId,
+		"ClusterArn": *c.ClusterArn,
+		"InstanceId": *instance.EC2InstanceId,
 	}).Info("Removing Cluster Instance")
 
 	trueAddress := true
-	_, err := autoscalingService.DetachInstances(&autoscaling.DetachInstancesInput{AutoScalingGroupName: c.AutoScalingGroup.Name, InstanceIds:[]*string{instanceId}, ShouldDecrementDesiredCapacity: &trueAddress})
+	_, err := autoscalingService.DetachInstances(&autoscaling.DetachInstancesInput{AutoScalingGroupName: c.AutoScalingGroup.Name, InstanceIds: []*string{instance.EC2InstanceId}, ShouldDecrementDesiredCapacity: &trueAddress})
 
 	if err != nil {
 		logrus.Error(err)
 		return errors.Wrap(err, 1)
 	}
 
-	_, terminateErr := ec2Service.TerminateInstances(&ec2.TerminateInstancesInput{InstanceIds:[]*string{instanceId}})
+	_, terminateErr := ec2Service.TerminateInstances(&ec2.TerminateInstancesInput{InstanceIds: []*string{instance.EC2InstanceId}})
 	if terminateErr != nil {
 		logrus.Error(terminateErr)
 		return errors.Wrap(terminateErr, 1)

@@ -14,8 +14,6 @@ import (
 )
 
 var ecsClusters map[string]*ECSCluster
-var logger *logrus.Logger
-
 
 
 func main() {
@@ -32,6 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	logrus.SetFormatter(&logrus.TextFormatter{})
 	logrus.AddHook(hook)
 
 	ecsClusters = make(map[string]*ECSCluster)
@@ -78,27 +77,22 @@ func process() error{
 			ecsClusters[*cluster.ClusterArn] = &ECSCluster{}
 		}
 		ecsClusters[*cluster.ClusterArn].ClusterDetails = cluster
-		logrus.Info("---------------------------- Checking Cluster: ", *cluster.ClusterArn)
+		logrus.WithFields(logrus.Fields{
+			"ClusterArn":  *cluster.ClusterArn,
+		}).Info("---------------------------- Checking Cluster")
 		if len(cluster.ContainerInstances) > 0 {
 			ecsClusters[*cluster.ClusterArn].Alerts = append(ecsClusters[*cluster.ClusterArn].Alerts, checkClusterResources(cluster)...)
 			ecsClusters[*cluster.ClusterArn].Alerts = append(ecsClusters[*cluster.ClusterArn].Alerts, checkServicesDesiredCount(cluster)...)
 			ecsClusters[*cluster.ClusterArn].Alerts = append(ecsClusters[*cluster.ClusterArn].Alerts, checkAllInstancesState(cluster)...)
 			ecsClusters[*cluster.ClusterArn].Alerts = alert.ConsolidateAlerts(ecsClusters[*cluster.ClusterArn].Alerts)
 
-			logrus.Info("Alert Count: ", len(ecsClusters[*cluster.ClusterArn].Alerts))
 			for _, alert := range ecsClusters[*cluster.ClusterArn].Alerts {
-				logrus.Info("--------------")
-				logrus.Info("Alert AlertDate: ", alert.AlertDate)
-				logrus.Info("Alert Status: ", alert.Status)
-				logrus.Info("Alert Type: ", alert.Type)
-				logrus.Info("Alert EventCount: ", alert.EventCount)
-				logrus.Info("Alert InstanceArn: ", alert.TargetInstanceArn)
-				logrus.Info("Alert ClusterArn: ", alert.ClusterArn)
-				logrus.Info("--------------")
+				logrus.WithFields(logrus.Fields{
+					"Alert":  alert,
+				}).Info("Reconciled Alert")
 			}
+
 			ecsClusters[*cluster.ClusterArn].reconcileAlerts()
-		} else {
-			logrus.Info("No Cluster Instances")
 		}
 	}
 

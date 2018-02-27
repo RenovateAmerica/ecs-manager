@@ -3,6 +3,7 @@ package alert
 import (
 	"sort"
 	"time"
+	"fmt"
 )
 
 type Type int
@@ -37,20 +38,58 @@ type Alert struct {
 	Trigger           Trigger
 	EventCount        int64
 	ClusterArn        string
-	TargetInstanceArn string
+	ContainerInstanceArn string
 	AlertDate         time.Time
 	LastActionDate    time.Time
 }
 
+func (a Alert) String() string{
+	alertType := "?"
+	switch  a.Type{
+	case ScaleUp:
+		alertType = "ScaleUp"
+	case ScaleDown:
+		alertType = "ScaleDown"
+	case Retire:
+		alertType = "Retire"
+	}
 
-func NewAlert(alertType Type, alertTrigger Trigger, clusterArn string, instanceArn string) *Alert {
+	alertStatus := "?"
+	switch a.Status{
+	case Created:
+		alertStatus = "Created"
+	case Pending:
+		alertStatus = "Pending"
+	case InProgress:
+		alertStatus = "InProgress"
+	case Completed:
+		alertStatus = "Completed"
+	}
+
+	alertTrigger := "?"
+	switch a.Trigger{
+	case Resources:
+		alertTrigger = "Resources"
+	case Schedule:
+		alertTrigger = "Schedule"
+	case Service:
+		alertTrigger = "Service"
+	case Instance:
+		alertTrigger = "Instance"
+	}
+
+	return fmt.Sprintf("Cluster: %s Count: %d AlertType: %s AlertTrigger: %s AlertStatus: %s Instance: %s", a.ClusterArn, a.EventCount, alertType, alertTrigger, alertStatus, a.ContainerInstanceArn)
+}
+
+
+func NewAlert(alertType Type, alertTrigger Trigger, clusterArn string, containerInstanceArn string) *Alert {
 	return &Alert{
 		Type:              alertType,
 		Status:            Created,
 		Trigger:           alertTrigger,
 		EventCount:        1,
 		ClusterArn:        clusterArn,
-		TargetInstanceArn: instanceArn,
+		ContainerInstanceArn: containerInstanceArn,
 		AlertDate:         time.Now(),
 		LastActionDate:    time.Now(),
 	}
@@ -65,7 +104,7 @@ func DeleteAlertFromArray(alerts []*Alert, i int) []*Alert {
 
 func AlertsContainInstanceArn(alerts []*Alert, instanceArn string) bool {
 	for _, alert := range alerts {
-		if alert.TargetInstanceArn == instanceArn {
+		if alert.ContainerInstanceArn == instanceArn {
 			return true
 		}
 	}
@@ -137,7 +176,7 @@ func ConsolidateAlerts(alerts []*Alert) []*Alert {
 					i-=1
 				}
 			} else if alert.Type == Retire && alert.Status == Pending {
-				if !AlertsContainInstanceArn(newRetireAlerts, alert.TargetInstanceArn) {
+				if !AlertsContainInstanceArn(newRetireAlerts, alert.ContainerInstanceArn) {
 					reOccurringAlerts = DeleteAlertFromArray(reOccurringAlerts, i)
 					i-=1
 				}

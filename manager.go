@@ -61,13 +61,17 @@ func checkClusterResources(cluster *ecs.ClusterDetails) []*alert.Alert {
 	if percentUtilization > *config.GetConfigValueAsFloat64("ResourceAddThresholdPercent") {
 		if clusterResourcesSupportUpScale(cluster) {
 			alert := alert.NewAlert(alert.ScaleUp, alert.Resources, *cluster.ClusterArn , "")
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		}
 	} else if percentUtilization < *config.GetConfigValueAsFloat64("ResourceRemoveThresholdPercent") {
 		if clusterResourcesSupportDownScale(cluster) {
 			alert := alert.NewAlert(alert.ScaleDown, alert.Resources, *cluster.ClusterArn , "")
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		}
 	}
@@ -77,13 +81,17 @@ func checkClusterResources(cluster *ecs.ClusterDetails) []*alert.Alert {
 	if percentUtilization > *config.GetConfigValueAsFloat64("ResourceAddThresholdPercent") {
 		if clusterResourcesSupportUpScale(cluster) {
 			alert := alert.NewAlert(alert.ScaleUp, alert.Resources, *cluster.ClusterArn , "")
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		}
 	} else if percentUtilization < *config.GetConfigValueAsFloat64("ResourceRemoveThresholdPercent") {
 		if clusterResourcesSupportDownScale(cluster) {
 			alert := alert.NewAlert(alert.ScaleDown, alert.Resources, *cluster.ClusterArn , "")
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		}
 	}
@@ -98,11 +106,21 @@ func checkAllInstancesState(cluster *ecs.ClusterDetails) []*alert.Alert {
 		expiredDate := clusterInstance.RegisteredDate.AddDate(0, 0, 7)
 		if *clusterInstance.AgentConnected == false {
 			alert := alert.NewAlert(alert.Retire, alert.Instance, *cluster.ClusterArn , *clusterInstance.ContainerInstanceArn)
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		} else if expiredDate.Before(time.Now()) {
 			alert := alert.NewAlert(alert.Retire, alert.Instance, *cluster.ClusterArn , *clusterInstance.ContainerInstanceArn)
-			logrus.Info("Creating Alert: ", alert)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
+			alerts = append(alerts, alert)
+		} else if *clusterInstance.Status == "DRAINING" {
+			alert := alert.NewAlert(alert.Retire, alert.Instance, *cluster.ClusterArn , *clusterInstance.ContainerInstanceArn)
+			logrus.WithFields(logrus.Fields{
+				"Alert":    alert,
+			}).Info("Creating Alert")
 			alerts = append(alerts, alert)
 		}
 	}
@@ -119,7 +137,9 @@ func checkServicesDesiredCount(cluster *ecs.ClusterDetails) []*alert.Alert {
 				lastMessage := *service.Events[0].Message
 				if r.MatchString(lastMessage) {
 					alert := alert.NewAlert(alert.ScaleUp, alert.Service, *cluster.ClusterArn , "")
-					logrus.Info("Creating Alert: ", alert)
+					logrus.WithFields(logrus.Fields{
+						"Alert":    alert,
+					}).Info("Creating Alert")
 					alerts = append(alerts, alert)
 				}
 			}
@@ -130,6 +150,8 @@ func checkServicesDesiredCount(cluster *ecs.ClusterDetails) []*alert.Alert {
 
 func (ecsCluster *ECSCluster) reconcileAlerts() {
 
+	alertIntervalCount := config.GetConfigValueAsInt64("AlertIntervalCount")
+	alertCoolDownIntervalCount := config.GetConfigValueAsInt64("AlertCooldownIntervalCount")
 	scaleUpAlerts := make([]*alert.Alert, 0)
 	scaleDownAlerts := make([]*alert.Alert, 0)
 	retireAlerts := make([]*alert.Alert, 0)
@@ -156,56 +178,61 @@ func (ecsCluster *ECSCluster) reconcileAlerts() {
 
 	// if there a scale up event
 	if len(scaleUpAlerts) > 0 {
-		//check to see if we are ready to go inProgress
-		if scaleUpAlerts[0].Status == alert.Pending && scaleUpAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertIntervalCount") {
+		currentScaleUpAlert := scaleUpAlerts[0]
+		if currentScaleUpAlert.Status == alert.Pending && currentScaleUpAlert.EventCount > *alertIntervalCount {
 			ecsCluster.ClusterDetails.IncreaseClusterCapacity()
-			scaleUpAlerts[0].Status = alert.InProgress
-			scaleUpAlerts[0].EventCount = 0
-		} else if scaleUpAlerts[0].Status == alert.InProgress {
+			currentScaleUpAlert.Status = alert.InProgress
+			currentScaleUpAlert.EventCount = 0
+		} else if currentScaleUpAlert.Status == alert.InProgress {
 			if int64(len(ecsCluster.ClusterDetails.ContainerInstances)) == *ecsCluster.ClusterDetails.AutoScalingGroup.DesiredInstanceCount {
-				scaleUpAlerts[0].Status = alert.Completed
-				scaleUpAlerts[0].EventCount = 0
+				currentScaleUpAlert.Status = alert.Completed
+				currentScaleUpAlert.EventCount = 0
 			} else {
 				logrus.Info("Still adding instances")
 			}
-		} else if scaleUpAlerts[0].Status == alert.Completed && scaleUpAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertCooldownIntervalCount") {
+		} else if currentScaleUpAlert.Status == alert.Completed && currentScaleUpAlert.EventCount > *alertCoolDownIntervalCount {
 			scaleUpAlerts = alert.DeleteAlertFromArray(scaleUpAlerts, 0)
 		}
 	} else if len(scaleDownAlerts) > 0 {
-		if scaleDownAlerts[0].Status == alert.Pending && scaleDownAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertIntervalCount") {
-			var instanceArn *string
+		currentScaleDownAlerts := scaleDownAlerts[0]
+		if currentScaleDownAlerts.Status == alert.Pending && currentScaleDownAlerts.EventCount > *alertIntervalCount {
+			var containerInstanceArn *string
 			if len(retireAlerts) > 0 {
-				instanceArn	= &retireAlerts[0].TargetInstanceArn
+				currentRetireAlert := retireAlerts[0]
+				containerInstanceArn = &currentRetireAlert.ContainerInstanceArn
 			}
-			res, _ := ecsCluster.ClusterDetails.DrainClusterInstance(instanceArn)
-			scaleDownAlerts[0].TargetInstanceArn = *res
-			scaleDownAlerts[0].Status = alert.InProgress
-			scaleDownAlerts[0].EventCount = 0
+			res, _ := ecsCluster.ClusterDetails.DrainClusterInstance(containerInstanceArn)
+			currentScaleDownAlerts.ContainerInstanceArn = *res
+			currentScaleDownAlerts.Status = alert.InProgress
+			currentScaleDownAlerts.EventCount = 0
 
-		} else if scaleDownAlerts[0].Status == alert.InProgress {
-			if *ecsCluster.ClusterDetails.GetTaskCount(&scaleDownAlerts[0].TargetInstanceArn) == 0 {
-				ecsCluster.ClusterDetails.RemoveClusterInstance(&scaleDownAlerts[0].TargetInstanceArn)
-				scaleDownAlerts[0].Status = alert.Completed
-				scaleDownAlerts[0].EventCount = 0
+		} else if currentScaleDownAlerts.Status == alert.InProgress {
+			containerInstance := ecsCluster.ClusterDetails.GetContainerInstance(&currentScaleDownAlerts.ContainerInstanceArn)
+			if containerInstance != nil && *containerInstance.RunningTasksCount == 0 {
+				ecsCluster.ClusterDetails.RemoveClusterInstance(containerInstance.ContainerInstanceArn)
+				currentScaleDownAlerts.Status = alert.Completed
+				currentScaleDownAlerts.EventCount = 0
 			} else {
 				logrus.Info("Still draining instances")
 			}
-		} else if scaleDownAlerts[0].Status == alert.Completed && scaleDownAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertCooldownIntervalCount")  {
+		} else if currentScaleDownAlerts.Status == alert.Completed && currentScaleDownAlerts.EventCount > *alertCoolDownIntervalCount  {
 			scaleDownAlerts = alert.DeleteAlertFromArray(scaleDownAlerts, 0)
 		}
 	} else if len(retireAlerts) > 0 {
-		if retireAlerts[0].Status == alert.Pending && retireAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertIntervalCount") {
+		currentRetireAlert := retireAlerts[0]
+		if currentRetireAlert.Status == alert.Pending && currentRetireAlert.EventCount > *alertIntervalCount {
+			ecsCluster.ClusterDetails.StandByClusterInstance(&currentRetireAlert.ContainerInstanceArn)
 			ecsCluster.ClusterDetails.IncreaseClusterCapacity()
-			retireAlerts[0].Status = alert.InProgress
-			retireAlerts[0].EventCount = 0
-		} else if retireAlerts[0].Status == alert.InProgress {
-			if int64(len(ecsCluster.ClusterDetails.ContainerInstances)) == *ecsCluster.ClusterDetails.AutoScalingGroup.DesiredInstanceCount {
-				retireAlerts[0].Status = alert.Completed
-				retireAlerts[0].EventCount = 0
+			currentRetireAlert.Status = alert.InProgress
+			currentRetireAlert.EventCount = 0
+		} else if currentRetireAlert.Status == alert.InProgress {
+			if int64(len(ecsCluster.ClusterDetails.ContainerInstances)) >= *ecsCluster.ClusterDetails.AutoScalingGroup.DesiredInstanceCount {
+				currentRetireAlert.Status = alert.Completed
+				currentRetireAlert.EventCount = 0
 			} else {
 				logrus.Info("Still adding instances")
 			}
-		} else if retireAlerts[0].Status == alert.Completed && retireAlerts[0].EventCount > *config.GetConfigValueAsInt64("AlertCooldownIntervalCount")  {
+		} else if currentRetireAlert.Status == alert.Completed && currentRetireAlert.EventCount > *alertCoolDownIntervalCount {
 			retireAlerts = alert.DeleteAlertFromArray(retireAlerts, 0)
 		}
 	}
