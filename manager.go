@@ -101,9 +101,10 @@ func checkClusterResources(cluster *ecs.ClusterDetails) []*alert.Alert {
 
 func checkAllInstancesState(cluster *ecs.ClusterDetails) []*alert.Alert {
 	alerts := make([]*alert.Alert, 0)
+	var instanceAge = int(*config.GetConfigValueAsInt64("InstanceMaxAgeDays"))
 
 	for _, clusterInstance := range cluster.ContainerInstances {
-		expiredDate := clusterInstance.RegisteredDate.AddDate(0, 0, 7)
+		expiredDate := clusterInstance.RegisteredDate.AddDate(0, 0, instanceAge)
 		if *clusterInstance.AgentConnected == false {
 			alert := alert.NewAlert(alert.Retire, alert.Instance, *cluster.ClusterArn , *clusterInstance.ContainerInstanceArn)
 			logrus.WithFields(logrus.Fields{

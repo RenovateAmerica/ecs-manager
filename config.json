@@ -2,6 +2,7 @@
   "IntervalSeconds": "5",
   "AlertIntervalCount": "4",
   "AlertCooldownIntervalCount": "5",
+  "InstanceMaxAgeDays": "7",
   "ResourceRemoveThresholdPercent": "0.40",
   "ResourceAddThresholdPercent": "0.80"
 }
