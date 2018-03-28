@@ -20,6 +20,11 @@ func round(x, unit float64) float64 {
 }
 
 func clusterResourcesSupportUpScale(cluster *ecs.ClusterDetails) bool {
+	if *cluster.AutoScalingGroup.DesiredInstanceCount >= *cluster.AutoScalingGroup.MaxInstanceCount {
+		logrus.Info("Autoscaling Maximum Instance Count Achieved")
+		return false
+	}
+
 	boxSize := cluster.ContainerInstances[0].TotalCPU
 	newTotal := cluster.TotalCPU + *boxSize
 	percentUtilization := round(1-(float64(cluster.TotalRemainingCPU + *boxSize)/float64(newTotal)), .01)
@@ -37,6 +42,11 @@ func clusterResourcesSupportUpScale(cluster *ecs.ClusterDetails) bool {
 }
 
 func clusterResourcesSupportDownScale(cluster *ecs.ClusterDetails) bool {
+	if *cluster.AutoScalingGroup.DesiredInstanceCount <= *cluster.AutoScalingGroup.MinInstanceCount {
+		logrus.Info("Autoscaling Minimum Instance Count Achieved")
+		return false
+	}
+
 	boxSize := cluster.ContainerInstances[0].TotalCPU
 	newTotal := cluster.TotalCPU - *boxSize
 	percentUtilization := round(1-(float64(cluster.TotalRemainingCPU - *boxSize)/float64(newTotal)), .01)
