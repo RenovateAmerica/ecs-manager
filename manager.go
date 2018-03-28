@@ -20,15 +20,14 @@ func round(x, unit float64) float64 {
 }
 
 func clusterResourcesSupportUpScale(cluster *ecs.ClusterDetails) bool {
-	if *cluster.AutoScalingGroup.DesiredInstanceCount >= *cluster.AutoScalingGroup.MaxInstanceCount {
-		logrus.Info("Autoscaling Maximum Instance Count Achieved")
-		return false
-	}
-
 	boxSize := cluster.ContainerInstances[0].TotalCPU
 	newTotal := cluster.TotalCPU + *boxSize
 	percentUtilization := round(1-(float64(cluster.TotalRemainingCPU + *boxSize)/float64(newTotal)), .01)
 	if percentUtilization > *config.GetConfigValueAsFloat64("ResourceRemoveThresholdPercent") {
+		if *cluster.AutoScalingGroup.DesiredInstanceCount >= *cluster.AutoScalingGroup.MaxInstanceCount {
+			logrus.Info("Autoscaling Maximum Instance Count Achieved")
+			return false
+		}
 		return true
 	}
 
@@ -36,17 +35,16 @@ func clusterResourcesSupportUpScale(cluster *ecs.ClusterDetails) bool {
 	newTotal = cluster.TotalMemory + *boxSize
 	percentUtilization = round(1-(float64(cluster.TotalRemainingMemory + *boxSize)/float64(newTotal)), .01)
 	if percentUtilization > *config.GetConfigValueAsFloat64("ResourceRemoveThresholdPercent") {
+		if *cluster.AutoScalingGroup.DesiredInstanceCount >= *cluster.AutoScalingGroup.MaxInstanceCount {
+			logrus.Info("Autoscaling Maximum Instance Count Achieved")
+			return false
+		}
 		return true
 	}
 	return false
 }
 
 func clusterResourcesSupportDownScale(cluster *ecs.ClusterDetails) bool {
-	if *cluster.AutoScalingGroup.DesiredInstanceCount <= *cluster.AutoScalingGroup.MinInstanceCount {
-		logrus.Info("Autoscaling Minimum Instance Count Achieved")
-		return false
-	}
-
 	boxSize := cluster.ContainerInstances[0].TotalCPU
 	newTotal := cluster.TotalCPU - *boxSize
 	percentUtilization := round(1-(float64(cluster.TotalRemainingCPU - *boxSize)/float64(newTotal)), .01)
@@ -58,6 +56,11 @@ func clusterResourcesSupportDownScale(cluster *ecs.ClusterDetails) bool {
 	newTotal = cluster.TotalMemory - *boxSize
 	percentUtilization = round(1-(float64(cluster.TotalRemainingMemory - *boxSize)/float64(newTotal)), .01)
 	if percentUtilization > *config.GetConfigValueAsFloat64("ResourceAddThresholdPercent") {
+		return false
+	}
+
+	if *cluster.AutoScalingGroup.DesiredInstanceCount <= *cluster.AutoScalingGroup.MinInstanceCount {
+		logrus.Info("Autoscaling Minimum Instance Count Achieved")
 		return false
 	}
 	return true
